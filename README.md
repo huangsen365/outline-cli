@@ -1,3 +1,5 @@
+[English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
+
 # Outline VPN CLI
 
 A simple command-line tool for managing Outline VPN access keys via the Outline Server API.
