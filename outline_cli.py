@@ -2,37 +2,103 @@
 """Minimal CLI for managing Outline VPN access keys."""
 
 import argparse
+import configparser
 import os
 import sys
 from pathlib import Path
 
-ENV_FILE = Path(__file__).parent / ".env"
+CONFIG_DIR = Path.home() / ".outline"
+CONFIG_FILE = CONFIG_DIR / "config.ini"
+OLD_ENV_FILE = Path(__file__).parent / ".env"
 
 
 def check_dependencies():
     """Check and import required packages."""
     try:
-        from dotenv import load_dotenv
         from outline_vpn.outline_vpn import OutlineVPN
-        return load_dotenv, OutlineVPN
-    except ImportError as e:
+        return OutlineVPN
+    except ImportError:
         print("Missing dependencies. Install with:")
-        print("  pip install outline-vpn-api python-dotenv")
+        print("  pip install outline-vpn-api")
         sys.exit(1)
 
 
-def load_config():
-    """Load config from .env file."""
-    load_dotenv, _ = check_dependencies()
-    if not ENV_FILE.exists():
+def ensure_config_dir():
+    """Ensure config directory exists."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def migrate_from_env():
+    """Migrate credentials from old .env file to new config.ini."""
+    if not OLD_ENV_FILE.exists() or CONFIG_FILE.exists():
+        return False
+
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(OLD_ENV_FILE)
+        api_url = os.getenv("OUTLINE_API_URL")
+        cert_sha256 = os.getenv("OUTLINE_CERT_SHA256")
+
+        if api_url and cert_sha256:
+            ensure_config_dir()
+            save_profile("default", api_url, cert_sha256)
+            print(f"Migrated credentials from .env to 'default' profile")
+            print(f"Config now stored in: {CONFIG_FILE}")
+            print()
+            return True
+    except ImportError:
+        pass
+    return False
+
+
+def get_config():
+    """Get configparser object for config file."""
+    config = configparser.ConfigParser()
+    if CONFIG_FILE.exists():
+        config.read(CONFIG_FILE)
+    return config
+
+
+def load_profile(profile="default"):
+    """Load credentials for a specific profile."""
+    config = get_config()
+    if profile not in config.sections():
         return None, None
-    load_dotenv(ENV_FILE)
-    return os.getenv("OUTLINE_API_URL"), os.getenv("OUTLINE_CERT_SHA256")
+    return config.get(profile, "api_url", fallback=None), config.get(profile, "cert_sha256", fallback=None)
 
 
-def setup_config():
-    """Prompt user for config and save to .env."""
-    print("First-time setup: Enter your Outline server credentials")
+def save_profile(profile, api_url, cert_sha256):
+    """Save credentials for a profile."""
+    ensure_config_dir()
+    config = get_config()
+    if profile not in config.sections():
+        config.add_section(profile)
+    config.set(profile, "api_url", api_url)
+    config.set(profile, "cert_sha256", cert_sha256)
+    with open(CONFIG_FILE, "w") as f:
+        config.write(f)
+
+
+def list_profiles():
+    """Return list of all profile names."""
+    config = get_config()
+    return config.sections()
+
+
+def remove_profile(profile):
+    """Remove a profile from config."""
+    config = get_config()
+    if profile not in config.sections():
+        return False
+    config.remove_section(profile)
+    with open(CONFIG_FILE, "w") as f:
+        config.write(f)
+    return True
+
+
+def setup_profile(profile):
+    """Prompt user for credentials and save to profile."""
+    print(f"Setup profile '{profile}': Enter your Outline server credentials")
     print()
     api_url = input("API URL (e.g., https://x.x.x.x:port/prefix): ").strip()
     cert_sha256 = input("Certificate SHA256: ").strip()
@@ -41,21 +107,29 @@ def setup_config():
         print("Error: Both values are required")
         sys.exit(1)
 
-    with open(ENV_FILE, "w") as f:
-        f.write(f"OUTLINE_API_URL={api_url}\n")
-        f.write(f"OUTLINE_CERT_SHA256={cert_sha256}\n")
-
-    print(f"Config saved to {ENV_FILE}")
+    save_profile(profile, api_url, cert_sha256)
+    print(f"Profile '{profile}' saved to {CONFIG_FILE}")
     return api_url, cert_sha256
 
 
-def get_client():
-    """Get configured Outline client."""
-    _, OutlineVPN = check_dependencies()
-    api_url, cert_sha256 = load_config()
+def get_client(profile="default"):
+    """Get configured Outline client for a profile."""
+    OutlineVPN = check_dependencies()
+
+    # Try migration from old .env
+    migrate_from_env()
+
+    api_url, cert_sha256 = load_profile(profile)
 
     if not api_url or not cert_sha256:
-        api_url, cert_sha256 = setup_config()
+        profiles = list_profiles()
+        if profiles:
+            print(f"Error: Profile '{profile}' not found")
+            print(f"Available profiles: {', '.join(profiles)}")
+            sys.exit(1)
+        else:
+            print("No profiles configured.")
+            api_url, cert_sha256 = setup_profile(profile)
 
     return OutlineVPN(api_url=api_url, cert_sha256=cert_sha256)
 
@@ -179,10 +253,75 @@ def cmd_limit(client, key_id, mb):
         sys.exit(1)
 
 
+def cmd_profile_add(name):
+    """Add a new profile."""
+    profiles = list_profiles()
+    if name in profiles:
+        print(f"Profile '{name}' already exists. Use 'profile show {name}' to view it.")
+        sys.exit(1)
+    setup_profile(name)
+
+
+def cmd_profile_list():
+    """List all profiles."""
+    profiles = list_profiles()
+    if not profiles:
+        print("No profiles configured.")
+        print("Run: outline_cli.py profile add <name>")
+        return
+
+    print(f"{'Profile':<20} API URL")
+    print("-" * 60)
+    for profile in profiles:
+        api_url, _ = load_profile(profile)
+        # Truncate long URLs
+        if len(api_url) > 38:
+            api_url = api_url[:35] + "..."
+        print(f"{profile:<20} {api_url}")
+
+
+def cmd_profile_remove(name):
+    """Remove a profile."""
+    if name not in list_profiles():
+        print(f"Profile '{name}' not found")
+        sys.exit(1)
+
+    confirm = input(f"Delete profile '{name}'? [y/N]: ").strip().lower()
+    if confirm != "y":
+        print("Cancelled")
+        return
+
+    if remove_profile(name):
+        print(f"Removed profile: {name}")
+    else:
+        print(f"Failed to remove profile: {name}")
+        sys.exit(1)
+
+
+def cmd_profile_show(name):
+    """Show profile details."""
+    if name not in list_profiles():
+        print(f"Profile '{name}' not found")
+        sys.exit(1)
+
+    api_url, cert_sha256 = load_profile(name)
+    # Mask most of the cert for security
+    masked_cert = cert_sha256[:8] + "..." + cert_sha256[-8:] if len(cert_sha256) > 20 else cert_sha256
+
+    print(f"Profile:     {name}")
+    print(f"API URL:     {api_url}")
+    print(f"Cert SHA256: {masked_cert}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage Outline VPN access keys",
         formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--profile", "-p",
+        default="default",
+        help="Profile name to use (default: 'default')"
     )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -211,13 +350,44 @@ def main():
     limit_parser.add_argument("key_id", type=int, help="Key ID")
     limit_parser.add_argument("mb", type=float, help="Limit in MB (0 to remove)")
 
+    # profile management
+    profile_parser = subparsers.add_parser("profile", help="Manage server profiles")
+    profile_subparsers = profile_parser.add_subparsers(dest="profile_cmd", help="Profile command")
+
+    profile_add = profile_subparsers.add_parser("add", help="Add a new profile")
+    profile_add.add_argument("name", help="Profile name")
+
+    profile_subparsers.add_parser("list", help="List all profiles")
+
+    profile_remove = profile_subparsers.add_parser("remove", help="Remove a profile")
+    profile_remove.add_argument("name", help="Profile name to remove")
+
+    profile_show = profile_subparsers.add_parser("show", help="Show profile details")
+    profile_show.add_argument("name", help="Profile name to show")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         sys.exit(1)
 
-    client = get_client()
+    # Handle profile commands (no client needed)
+    if args.command == "profile":
+        if not args.profile_cmd:
+            profile_parser.print_help()
+            sys.exit(1)
+        if args.profile_cmd == "add":
+            cmd_profile_add(args.name)
+        elif args.profile_cmd == "list":
+            cmd_profile_list()
+        elif args.profile_cmd == "remove":
+            cmd_profile_remove(args.name)
+        elif args.profile_cmd == "show":
+            cmd_profile_show(args.name)
+        return
+
+    # Commands that require a client
+    client = get_client(args.profile)
 
     if args.command == "list":
         cmd_list(client)
