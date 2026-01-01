@@ -3,6 +3,7 @@
 
 import argparse
 import configparser
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ EXAMPLES = """Examples:
   outline_cli.py rename 1 "Work iPhone"
   outline_cli.py limit 1 1024
   outline_cli.py limit 1 0
+  outline_cli.py --profile home get-api-info
   outline_cli.py profile add home
   outline_cli.py --profile home list
 """
@@ -331,6 +333,26 @@ def cmd_profile_show(name):
     print(f"Cert SHA256: {masked_cert}")
 
 
+def cmd_get_api_info(profile):
+    """Print profile credentials as JSON."""
+    api_url, cert_sha256 = load_profile(profile)
+    if not api_url or not cert_sha256:
+        profiles = list_profiles()
+        if profiles:
+            print(f"Error: Profile '{profile}' not found")
+            print(f"Available profiles: {', '.join(profiles)}")
+        else:
+            print("No profiles configured.")
+            print("Run: outline_cli.py profile add <name>")
+        sys.exit(1)
+
+    payload = {
+        "apiUrl": api_url,
+        "certSha256": cert_sha256,
+    }
+    print(json.dumps(payload, indent=2))
+
+
 def main():
     parser = OutlineArgumentParser(
         description="Manage Outline VPN access keys",
@@ -385,6 +407,9 @@ def main():
     profile_show = profile_subparsers.add_parser("show", help="Show profile details")
     profile_show.add_argument("name", help="Profile name to show")
 
+    # get-api-info
+    subparsers.add_parser("get-api-info", help="Print profile API info as JSON")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -404,6 +429,9 @@ def main():
             cmd_profile_remove(args.name)
         elif args.profile_cmd == "show":
             cmd_profile_show(args.name)
+        return
+    if args.command == "get-api-info":
+        cmd_get_api_info(args.profile)
         return
 
     # Commands that require a client
