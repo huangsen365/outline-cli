@@ -11,6 +11,24 @@ CONFIG_DIR = Path.home() / ".outline"
 CONFIG_FILE = CONFIG_DIR / "config.ini"
 OLD_ENV_FILE = Path(__file__).parent / ".env"
 
+EXAMPLES = """Examples:
+  outline_cli.py list
+  outline_cli.py add --name laptop
+  outline_cli.py add laptop
+  outline_cli.py show 1
+  outline_cli.py rename 1 "Work iPhone"
+  outline_cli.py limit 1 1024
+  outline_cli.py limit 1 0
+  outline_cli.py profile add home
+  outline_cli.py --profile home list
+"""
+
+
+class OutlineArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_help(sys.stderr)
+        self.exit(2, f"\nError: {message}\n")
+
 
 def check_dependencies():
     """Check and import required packages."""
@@ -193,7 +211,7 @@ def cmd_show(client, key_id):
 def cmd_add(client, name):
     """Create a new access key."""
     try:
-        key = client.create_key(key_name=name) if name else client.create_key()
+        key = client.create_key(name=name) if name else client.create_key()
         print(f"Created key: {key.key_id} - {key.name or '(unnamed)'}")
         print(f"Access URL: {key.access_url}")
     except Exception as e:
@@ -314,9 +332,10 @@ def cmd_profile_show(name):
 
 
 def main():
-    parser = argparse.ArgumentParser(
+    parser = OutlineArgumentParser(
         description="Manage Outline VPN access keys",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=EXAMPLES
     )
     parser.add_argument(
         "--profile", "-p",
@@ -334,7 +353,8 @@ def main():
 
     # add
     add_parser = subparsers.add_parser("add", help="Create a new access key")
-    add_parser.add_argument("--name", "-n", help="Name for the new key")
+    add_parser.add_argument("name", nargs="?", help="Name for the new key (positional)")
+    add_parser.add_argument("--name", "-n", dest="name", help="Name for the new key (flag)")
 
     # delete
     del_parser = subparsers.add_parser("delete", help="Delete an access key")
