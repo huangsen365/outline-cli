@@ -17,6 +17,9 @@ source venv/bin/activate
 
 # 安裝相依套件
 pip install outline-vpn-api python-dotenv
+
+# 可選：僅在使用存取金鑰測試工具（ss_test.py / ss_proxy.py）時需要
+pip install cryptography
 ```
 
 ## 設定
@@ -60,6 +63,22 @@ ID     Name                 Usage (MB)   Access URL
 --------------------------------------------------------------------------------
 1      裝置-A               125.3        ss://Y2hhY...@1.2.3.4:12345/?outline=1
 2      裝置-B               0.0          ss://Y2hhY...@1.2.3.4:12345/?outline=1
+```
+
+## 測試存取金鑰
+
+兩個輔助腳本可用於驗證某個 `ss://` 金鑰是否正常運作。它們都以存取 URL 作為參數，
+支援 Outline 使用的 `chacha20-ietf-poly1305` 加密方式，並依賴 `cryptography`
+套件（`pip install cryptography`）。
+
+```bash
+# 一次性連線檢查：透過該金鑰通道發送一個 HTTP 請求，
+# 並印出每個協定步驟（交握、加密、回應）。
+python ss_test.py 'ss://<base64>@host:port/?outline=1'
+
+# 將該金鑰公開為本機 SOCKS5 代理，讓任何用戶端都可透過它路由流量。
+python ss_proxy.py 'ss://<base64>@host:port/?outline=1' --listen 127.0.0.1:1080
+curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org
 ```
 
 ## Clash 設定範本

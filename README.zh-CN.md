@@ -17,6 +17,9 @@ source venv/bin/activate
 
 # 安装依赖
 pip install outline-vpn-api python-dotenv
+
+# 可选：仅在使用访问密钥测试工具（ss_test.py / ss_proxy.py）时需要
+pip install cryptography
 ```
 
 ## 配置
@@ -60,6 +63,22 @@ ID     Name                 Usage (MB)   Access URL
 --------------------------------------------------------------------------------
 1      设备-A               125.3        ss://Y2hhY...@1.2.3.4:12345/?outline=1
 2      设备-B               0.0          ss://Y2hhY...@1.2.3.4:12345/?outline=1
+```
+
+## 测试访问密钥
+
+两个辅助脚本可用于验证某个 `ss://` 密钥是否正常工作。它们都以访问 URL 作为参数，
+支持 Outline 使用的 `chacha20-ietf-poly1305` 加密方式，并依赖 `cryptography`
+软件包（`pip install cryptography`）。
+
+```bash
+# 一次性连通性检查：通过该密钥隧道发送一个 HTTP 请求，
+# 并打印每个协议步骤（握手、加密、响应）。
+python ss_test.py 'ss://<base64>@host:port/?outline=1'
+
+# 将该密钥暴露为本地 SOCKS5 代理，使任意客户端都可通过它路由流量。
+python ss_proxy.py 'ss://<base64>@host:port/?outline=1' --listen 127.0.0.1:1080
+curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org
 ```
 
 ## Clash 配置模板

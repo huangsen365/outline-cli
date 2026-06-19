@@ -17,6 +17,9 @@ source venv/bin/activate
 
 # Install dependencies
 pip install outline-vpn-api python-dotenv
+
+# Optional: only needed for the access-key test tools (ss_test.py / ss_proxy.py)
+pip install cryptography
 ```
 
 ## Configuration
@@ -60,6 +63,22 @@ ID     Name                 Usage (MB)   Access URL
 --------------------------------------------------------------------------------
 1      Device-A             125.3        ss://Y2hhY...@1.2.3.4:12345/?outline=1
 2      Device-B             0.0          ss://Y2hhY...@1.2.3.4:12345/?outline=1
+```
+
+## Testing Access Keys
+
+Two helper scripts verify that an `ss://` key actually works. Both take the
+access URL as an argument, support the `chacha20-ietf-poly1305` cipher used by
+Outline, and require the `cryptography` package (`pip install cryptography`).
+
+```bash
+# One-shot connectivity check: tunnels a single HTTP request through the key
+# and prints each protocol step (handshake, encryption, response).
+python ss_test.py 'ss://<base64>@host:port/?outline=1'
+
+# Expose the key as a local SOCKS5 proxy so any client can route through it.
+python ss_proxy.py 'ss://<base64>@host:port/?outline=1' --listen 127.0.0.1:1080
+curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org
 ```
 
 ## Clash Config Template
