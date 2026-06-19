@@ -2,3 +2,7 @@
 venv/
 __pycache__/
 *.pyc
+
+# Filled-in Clash configs may contain key passwords; keep only the template.
+clash-*.yaml
+!clash-template.yaml

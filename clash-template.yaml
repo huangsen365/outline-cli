@@ -1,0 +1,36 @@
+# Clash proxy config template for an Outline / Shadowsocks access key.
+#
+# 1. Get a key's details:
+#      python outline_cli.py --profile <profile> show <key_id>
+#    The access URL has the form:
+#      ss://<base64>@<server>:<port>/?outline=1
+#
+# 2. Decode <base64> to reveal "<cipher>:<password>":
+#      echo '<base64>' | base64 -d
+#      # -> chacha20-ietf-poly1305:<password>
+#
+# 3. Replace every <...> placeholder below, then load this file in your Clash client.
+#
+# NOTE: a filled-in copy contains your key's password. Keep it out of version control
+#       (see the clash-*.yaml rule in .gitignore).
+
+proxies:
+  - name: "<key-name>"                 # any label, e.g. clash-mi-on-mba-m4-jp
+    type: ss
+    server: <server>                   # host or IP from the access URL
+    port: <port>                       # port from the access URL
+    cipher: chacha20-ietf-poly1305     # part before ':' in the decoded base64
+    password: "<password>"             # part after ':' in the decoded base64
+    udp: true
+
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies:
+      - "<key-name>"                   # must match the proxy name above
+      - DIRECT
+
+rules:
+  - GEOIP,LAN,DIRECT
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy

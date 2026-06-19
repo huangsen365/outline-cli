@@ -62,6 +62,54 @@ ID     Name                 Usage (MB)   Access URL
 2      Device-B             0.0          ss://Y2hhY...@1.2.3.4:12345/?outline=1
 ```
 
+## Clash Config Template
+
+A ready-to-fill Clash proxy template is included at
+[`clash-template.yaml`](clash-template.yaml). Copy it, replace the `<...>`
+placeholders with values from your access key, and load it in your Clash client.
+
+Get a key's `ss://` access URL:
+
+```bash
+python outline_cli.py --profile <profile> show <key_id>
+```
+
+The URL has the form `ss://<base64>@<server>:<port>/?outline=1`. Decode the
+`<base64>` part to reveal `<cipher>:<password>`:
+
+```bash
+echo '<base64>' | base64 -d
+# -> chacha20-ietf-poly1305:<password>
+```
+
+A filled-in example:
+
+```yaml
+proxies:
+  - name: "clash-mi-on-mba-m4-jp"
+    type: ss
+    server: example.wansio.com
+    port: 2132
+    cipher: chacha20-ietf-poly1305
+    password: "your-password-here"
+    udp: true
+
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies:
+      - "clash-mi-on-mba-m4-jp"
+      - DIRECT
+
+rules:
+  - GEOIP,LAN,DIRECT
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
+```
+
+> **Note:** a filled config contains your key's password. Keep it out of version
+> control — the `.gitignore` ignores `clash-*.yaml` (except the template itself).
+
 ## License
 
 MIT
