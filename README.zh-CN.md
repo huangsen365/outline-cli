@@ -62,6 +62,54 @@ ID     Name                 Usage (MB)   Access URL
 2      设备-B               0.0          ss://Y2hhY...@1.2.3.4:12345/?outline=1
 ```
 
+## Clash 配置模板
+
+项目中包含一个可直接填写的 Clash 代理配置模板
+[`clash-template.yaml`](clash-template.yaml)。复制该文件，将其中的 `<...>`
+占位符替换为您访问密钥中的值，然后在 Clash 客户端中加载即可。
+
+获取某个密钥的 `ss://` 访问 URL：
+
+```bash
+python outline_cli.py --profile <profile> show <key_id>
+```
+
+该 URL 的格式为 `ss://<base64>@<server>:<port>/?outline=1`。解码其中的
+`<base64>` 部分即可得到 `<cipher>:<password>`：
+
+```bash
+echo '<base64>' | base64 -d
+# -> chacha20-ietf-poly1305:<password>
+```
+
+填写后的示例：
+
+```yaml
+proxies:
+  - name: "clash-mi-on-mba-m4-jp"
+    type: ss
+    server: example.wansio.com
+    port: 2132
+    cipher: chacha20-ietf-poly1305
+    password: "your-password-here"
+    udp: true
+
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies:
+      - "clash-mi-on-mba-m4-jp"
+      - DIRECT
+
+rules:
+  - GEOIP,LAN,DIRECT
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
+```
+
+> **注意：** 填写后的配置包含您密钥的密码。请勿提交到版本控制——`.gitignore`
+> 已忽略 `clash-*.yaml`（模板文件除外）。
+
 ## 许可证
 
 MIT
